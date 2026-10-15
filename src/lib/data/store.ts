@@ -163,13 +163,18 @@ export async function getAllProducts(
   return isAdmin ? filtered : filtered.map(sanitizePublicProduct);
 }
 
+function isValidUUID(val?: string | null): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+}
+
 export async function saveProduct(
   productData: Partial<ProductWithDetails>
 ): Promise<ProductWithDetails> {
   const products = getLocalProductsStore();
   const isNew = !productData.id || !products.some((p) => p.id === productData.id);
 
-  const id = productData.id || `prod-${Date.now()}`;
+  const id = isValidUUID(productData.id) ? productData.id! : crypto.randomUUID();
   const slug =
     productData.slug ||
     (productData.name || "product")
@@ -196,7 +201,7 @@ export async function saveProduct(
     images:
       productData.images && productData.images.length > 0
         ? productData.images.map((img, idx) => ({
-            id: img.id || `img-${Date.now()}-${idx}`,
+            id: isValidUUID(img.id) ? img.id : crypto.randomUUID(),
             product_id: id,
             image_url: img.image_url,
             alt_text: img.alt_text || productData.name,
@@ -204,7 +209,7 @@ export async function saveProduct(
           }))
         : [
             {
-              id: `img-${Date.now()}-0`,
+              id: crypto.randomUUID(),
               product_id: id,
               image_url:
                 "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1000&q=80",
@@ -215,7 +220,7 @@ export async function saveProduct(
     variants:
       productData.variants && productData.variants.length > 0
         ? productData.variants.map((v, idx) => ({
-            id: v.id || `var-${Date.now()}-${idx}`,
+            id: isValidUUID(v.id) ? v.id : crypto.randomUUID(),
             product_id: id,
             size: v.size?.trim() || undefined,
             color: v.color?.trim() || undefined,
@@ -244,7 +249,7 @@ export async function saveProduct(
   // Also write to Supabase if configured
   if (isSupabaseAdminConfigured && supabaseAdmin) {
     try {
-      const { error } = await supabaseAdmin.from("products").upsert({
+      const { error: pErr } = await supabaseAdmin.from("products").upsert({
         id: fullProduct.id,
         name: fullProduct.name,
         slug: fullProduct.slug,
@@ -260,8 +265,53 @@ export async function saveProduct(
         is_active: fullProduct.is_active,
         specifications: fullProduct.specifications,
         video_url: fullProduct.video_url,
+        updated_at: new Date().toISOString(),
       });
-      if (error) console.warn("Supabase product upsert error:", error);
+      if (pErr) {
+        console.warn("Supabase product upsert error:", pErr);
+      } else {
+        // Upsert images
+        if (fullProduct.images && fullProduct.images.length > 0) {
+          await supabaseAdmin
+            .from("product_images")
+            .delete()
+            .eq("product_id", fullProduct.id);
+          const imagesToInsert = fullProduct.images.map((img) => ({
+            id: img.id,
+            product_id: fullProduct.id,
+            image_url: img.image_url,
+            alt_text: img.alt_text || fullProduct.name,
+            sort_order: img.sort_order ?? 0,
+          }));
+          const { error: imgErr } = await supabaseAdmin
+            .from("product_images")
+            .insert(imagesToInsert);
+          if (imgErr) console.warn("Supabase images insert error:", imgErr);
+        }
+
+        // Upsert variants
+        if (fullProduct.variants && fullProduct.variants.length > 0) {
+          await supabaseAdmin
+            .from("product_variants")
+            .delete()
+            .eq("product_id", fullProduct.id);
+          const variantsToInsert = fullProduct.variants.map((v) => ({
+            id: v.id,
+            product_id: fullProduct.id,
+            size: v.size || null,
+            color: v.color || null,
+            sku: v.sku || null,
+            selling_price_override: v.selling_price_override || null,
+            expected_purchase_cost: v.expected_purchase_cost || null,
+            is_available: v.is_available ?? true,
+            stock_quantity: v.stock_quantity ?? 50,
+          }));
+          const { error: varErr } = await supabaseAdmin
+            .from("product_variants")
+            .insert(variantsToInsert);
+          if (varErr) console.warn("Supabase variants insert error:", varErr);
+        }
+      }
     } catch (e) {
       console.warn("Supabase upsert exception:", e);
     }
@@ -279,7 +329,9 @@ export async function deleteProduct(id: string): Promise<boolean> {
 
   if (isSupabaseAdminConfigured && supabaseAdmin) {
     try {
-      await supabaseAdmin.from("products").delete().eq("id", id);
+      if (isValidUUID(id)) {
+        await supabaseAdmin.from("products").delete().eq("id", id);
+      }
     } catch (e) {
       console.warn("Supabase delete exception:", e);
     }
