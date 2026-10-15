@@ -20,9 +20,31 @@ export async function POST(req: NextRequest) {
     }
 
     const input = parseResult.data;
+    const isCod = input.paymentMethod === "cod";
 
     // Create the pending order first in the database with server-authoritative price
-    const { order, authoritativeAmount } = await createPendingOrder(input);
+    const { order, authoritativeAmount } = await createPendingOrder(
+      input,
+      undefined,
+      isCod ? "cod" : "online"
+    );
+
+    // If Cash on Delivery, return confirmed order immediately (no Razorpay order needed)
+    if (isCod) {
+      return NextResponse.json({
+        success: true,
+        isCod: true,
+        orderId: order.id,
+        orderNumber: order.order_number,
+        orderAccessToken: order.order_access_token,
+        amountInRupees: authoritativeAmount,
+        customer: {
+          name: order.customer_name,
+          phone: order.customer_phone,
+          email: order.customer_email,
+        },
+      });
+    }
 
     // Create Razorpay order using the server-calculated amount
     const rzpOrder = await createRazorpayOrder({
@@ -38,6 +60,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      isCod: false,
       orderId: order.id,
       orderNumber: order.order_number,
       orderAccessToken: order.order_access_token,

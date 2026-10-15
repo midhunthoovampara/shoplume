@@ -138,7 +138,9 @@ export interface OrderWithDetails extends Order {
     status?: string;
     amount?: number;
     verified_at?: string;
+    payment_method?: "online" | "cod" | string;
   } | null;
+  payment_method?: "online" | "cod" | string;
   product_supplier_url?: string; // admin view helper
 }
 
@@ -163,6 +165,7 @@ export const createOrderInputSchema = z.object({
   variantId: z.string().optional().nullable(),
   quantity: z.number().int().min(1).max(10).default(1),
   customer: checkoutAddressSchema,
+  paymentMethod: z.enum(["online", "cod"]).default("online"),
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderInputSchema>;

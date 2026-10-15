@@ -217,27 +217,15 @@ export async function saveProduct(
         ? productData.variants.map((v, idx) => ({
             id: v.id || `var-${Date.now()}-${idx}`,
             product_id: id,
-            size: v.size || "Standard",
-            color: v.color || "Standard",
+            size: v.size?.trim() || undefined,
+            color: v.color?.trim() || undefined,
             sku: v.sku || `SKU-${Date.now()}-${idx}`,
             selling_price_override: v.selling_price_override ?? null,
             expected_purchase_cost: v.expected_purchase_cost ?? null,
             is_available: v.is_available ?? true,
             stock_quantity: v.stock_quantity ?? 50,
           }))
-        : [
-            {
-              id: `var-${Date.now()}-0`,
-              product_id: id,
-              size: "Standard",
-              color: "Default",
-              sku: `SKU-${Date.now()}`,
-              selling_price_override: null,
-              expected_purchase_cost: null,
-              is_available: true,
-              stock_quantity: 50,
-            },
-          ],
+        : [],
     created_at: productData.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -302,15 +290,19 @@ export async function deleteProduct(id: string): Promise<boolean> {
 // Order Management
 export async function createPendingOrder(
   input: CreateOrderInput,
-  razorpayOrderId?: string
+  razorpayOrderId?: string,
+  paymentMethod: "online" | "cod" = "online"
 ): Promise<{ order: OrderWithDetails; authoritativeAmount: number }> {
   const product = await getProductById(input.productId, true);
   if (!product) {
     throw new Error("Product not found");
   }
 
+  const isCod = paymentMethod === "cod" || input.paymentMethod === "cod";
+  const finalPaymentMethod = isCod ? "cod" : "online";
+
   let unitPrice = product.selling_price;
-  let variantSnapshot = "Standard";
+  let variantSnapshot: string | null = null;
 
   if (input.variantId) {
     const variant = product.variants.find((v) => v.id === input.variantId);
@@ -323,7 +315,7 @@ export async function createPendingOrder(
       }
       variantSnapshot = [variant.size, variant.color]
         .filter(Boolean)
-        .join(" / ");
+        .join(" / ") || null;
     }
   }
 
@@ -376,10 +368,12 @@ export async function createPendingOrder(
       },
     ],
     payment: {
-      razorpay_order_id: razorpayOrderId || `order_demo_${Date.now()}`,
-      status: "created",
+      razorpay_order_id: isCod ? `COD-${orderNumber}` : (razorpayOrderId || `order_demo_${Date.now()}`),
+      status: isCod ? "pending_cod" : "created",
       amount: totalAmount,
+      payment_method: finalPaymentMethod,
     },
+    payment_method: finalPaymentMethod,
     supplier_purchase: {
       id: `sp-${Date.now()}`,
       order_id: orderId,
@@ -389,7 +383,7 @@ export async function createPendingOrder(
       tracking_number: null,
       tracking_url: null,
       courier_name: null,
-      admin_notes: null,
+      admin_notes: isCod ? "Cash on Delivery (COD) order. Collect cash/UPI on delivery." : null,
     },
     history: [
       {
@@ -399,7 +393,9 @@ export async function createPendingOrder(
         new_status: "pending",
         changed_by: "system_checkout",
         changed_at: new Date().toISOString(),
-        notes: "Order created at checkout",
+        notes: isCod
+          ? "Order placed with Cash on Delivery (COD)"
+          : "Order created at checkout (Online Payment)",
       },
     ],
     product_supplier_url: product.meesho_product_url,

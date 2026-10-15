@@ -126,11 +126,69 @@ export function ProductView({ product }: ProductViewProps) {
 
   // Group variants
   const availableSizes = Array.from(
-    new Set(product.variants.map((v) => v.size).filter(Boolean))
+    new Set(
+      product.variants
+        .map((v) => (v.size || "").trim())
+        .filter(Boolean)
+    )
   );
   const availableColors = Array.from(
-    new Set(product.variants.map((v) => v.color).filter(Boolean))
+    new Set(
+      product.variants
+        .map((v) => (v.color || "").trim())
+        .filter(Boolean)
+    )
   );
+
+  const hasSizes = availableSizes.length > 0;
+  const hasColors = availableColors.length > 0;
+  const hasVariants = product.variants.length > 0 && (hasSizes || hasColors);
+
+  const activeColor = selectedVariant?.color || availableColors[0] || "";
+  const activeSize = selectedVariant?.size || availableSizes[0] || "";
+
+  const getColorHex = (colorName: string): string => {
+    const c = colorName.toLowerCase().trim();
+    if (c.includes("black")) return "#1a1a1a";
+    if (c.includes("white")) return "#f8fafc";
+    if (c.includes("red") || c.includes("crimson")) return "#ef4444";
+    if (c.includes("wine") || c.includes("maroon") || c.includes("burgundy")) return "#800020";
+    if (c.includes("navy")) return "#0f172a";
+    if (c.includes("blue")) return "#2563eb";
+    if (c.includes("emerald")) return "#059669";
+    if (c.includes("green") || c.includes("olive")) return "#16a34a";
+    if (c.includes("yellow") || c.includes("mustard")) return "#eab308";
+    if (c.includes("orange") || c.includes("rust")) return "#ea580c";
+    if (c.includes("pink") || c.includes("rose")) return "#ec4899";
+    if (c.includes("purple") || c.includes("violet")) return "#8b5cf6";
+    if (c.includes("grey") || c.includes("gray")) return "#64748b";
+    if (c.includes("beige") || c.includes("cream")) return "#f5f5dc";
+    return "#f97316";
+  };
+
+  const handleSelectColor = (col: string) => {
+    if (hasSizes) {
+      const match =
+        product.variants.find((v) => v.color === col && v.size === activeSize) ||
+        product.variants.find((v) => v.color === col);
+      if (match) setSelectedVariantId(match.id);
+    } else {
+      const match = product.variants.find((v) => v.color === col);
+      if (match) setSelectedVariantId(match.id);
+    }
+  };
+
+  const handleSelectSize = (sz: string) => {
+    if (hasColors) {
+      const match =
+        product.variants.find((v) => v.size === sz && v.color === activeColor) ||
+        product.variants.find((v) => v.size === sz);
+      if (match) setSelectedVariantId(match.id);
+    } else {
+      const match = product.variants.find((v) => v.size === sz);
+      if (match) setSelectedVariantId(match.id);
+    }
+  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.targetTouches[0].clientX;
@@ -183,8 +241,8 @@ export function ProductView({ product }: ProductViewProps) {
   };
 
   const handleBuyNow = () => {
-    if (product.variants.length > 0 && !selectedVariantId) {
-      toast("Please select a size / variant first", "error");
+    if (hasVariants && !selectedVariantId) {
+      toast("Please select a variant option first", "error");
       const picker = document.getElementById("variant-picker");
       picker?.scrollIntoView({ behavior: "smooth" });
       return;
@@ -604,17 +662,78 @@ export function ProductView({ product }: ProductViewProps) {
               </div>
             </div>
 
-            {/* Variant Selector (Size & Color) */}
+            {/* Variant Selector (Color, Size, or Standard Single Item) */}
             <div
               id="variant-picker"
               className="p-4 sm:p-6 bg-white rounded-2xl sm:rounded-3xl border border-orange-100/90 shadow-sm space-y-4"
             >
-              {/* Size Selector */}
-              {availableSizes.length > 0 && (
+              {/* Option 1: Color Selector (if product has colors) */}
+              {hasColors && (
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
                     <label className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
-                      Select Size
+                      Select Color:{" "}
+                      <span className="text-[#FF5520] font-bold normal-case ml-1">
+                        {activeColor}
+                      </span>
+                    </label>
+                    <span className="text-[11px] font-semibold text-slate-400">
+                      {availableColors.length}{" "}
+                      {availableColors.length === 1 ? "Color" : "Colors"}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2.5">
+                    {availableColors.map((col) => {
+                      const isSelected = activeColor === col;
+                      const variantForColor = product.variants.find(
+                        (v) => v.color === col
+                      );
+                      const isAvailable = variantForColor?.is_available ?? true;
+
+                      return (
+                        <button
+                          key={col}
+                          type="button"
+                          onClick={() => handleSelectColor(col)}
+                          disabled={!isAvailable}
+                          className={`px-3.5 py-2 rounded-2xl text-xs font-extrabold transition-all duration-200 border flex items-center gap-2 cursor-pointer ${
+                            isSelected
+                              ? "bg-[#1E222B] text-white border-[#1E222B] shadow-md ring-4 ring-orange-500/20 scale-[1.02]"
+                              : "bg-orange-50/20 text-slate-800 border-slate-200 hover:border-orange-300 hover:bg-orange-50/50"
+                          } ${!isAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
+                        >
+                          <span
+                            className="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0 shadow-xs"
+                            style={{ backgroundColor: getColorHex(col) }}
+                          />
+                          <span>{col}</span>
+                          {!hasSizes &&
+                            variantForColor?.selling_price_override &&
+                            variantForColor.selling_price_override !==
+                              product.selling_price && (
+                              <span className="text-[10px] text-amber-300 font-bold ml-1">
+                                {formatINR(
+                                  variantForColor.selling_price_override
+                                )}
+                              </span>
+                            )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Option 2: Size Selector (if product has sizes) */}
+              {hasSizes && (
+                <div className={hasColors ? "pt-3 border-t border-slate-100" : ""}>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
+                      Select Size:{" "}
+                      <span className="text-[#FF5520] font-bold normal-case ml-1">
+                        {activeSize}
+                      </span>
                     </label>
                     <button
                       type="button"
@@ -627,25 +746,37 @@ export function ProductView({ product }: ProductViewProps) {
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {product.variants.map((v) => {
-                      const isSelected = selectedVariantId === v.id;
+                    {availableSizes.map((sz) => {
+                      const isSelected = activeSize === sz;
+                      const v = hasColors
+                        ? product.variants.find(
+                            (item) => item.size === sz && item.color === activeColor
+                          ) || product.variants.find((item) => item.size === sz)
+                        : product.variants.find((item) => item.size === sz);
+
+                      const isAvailable = v?.is_available ?? true;
+
                       return (
                         <button
-                          key={v.id}
+                          key={sz}
                           type="button"
-                          onClick={() => setSelectedVariantId(v.id)}
-                          className={`p-3 rounded-2xl text-xs font-extrabold transition-all duration-200 border text-center flex flex-col items-center justify-center gap-0.5 cursor-pointer ${isSelected
-                            ? "bg-[#1E222B] text-white border-[#1E222B] shadow-md ring-4 ring-orange-500/20 scale-[1.02]"
-                            : "bg-orange-50/20 text-slate-800 border-slate-200 hover:border-orange-300 hover:bg-orange-50/50"
-                            } ${!v.is_available ? "opacity-40 cursor-not-allowed" : ""}`}
-                          disabled={!v.is_available}
+                          onClick={() => handleSelectSize(sz)}
+                          className={`p-3 rounded-2xl text-xs font-extrabold transition-all duration-200 border text-center flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                            isSelected
+                              ? "bg-[#1E222B] text-white border-[#1E222B] shadow-md ring-4 ring-orange-500/20 scale-[1.02]"
+                              : "bg-orange-50/20 text-slate-800 border-slate-200 hover:border-orange-300 hover:bg-orange-50/50"
+                          } ${!isAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
+                          disabled={!isAvailable}
                         >
-                          <span className="text-sm font-black">{v.size || "Standard"}</span>
+                          <span className="text-sm font-black">{sz}</span>
                           <span
-                            className={`text-[10px] ${isSelected ? "text-amber-300 font-semibold" : "text-slate-400"
-                              }`}
+                            className={`text-[10px] ${
+                              isSelected
+                                ? "text-amber-300 font-semibold"
+                                : "text-slate-400"
+                            }`}
                           >
-                            {v.stock_quantity && v.stock_quantity < 10
+                            {v?.stock_quantity && v.stock_quantity < 10
                               ? "Few Left"
                               : "In Stock"}
                           </span>
@@ -656,27 +787,23 @@ export function ProductView({ product }: ProductViewProps) {
                 </div>
               )}
 
-              {/* Color Swatch Display */}
-              {availableColors.length > 0 && (
-                <div className="pt-2 border-t border-slate-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
-                      Available Color:{" "}
-                      <span className="text-[#FF5520] font-bold normal-case">
-                        {selectedVariant?.color || availableColors[0]}
+              {/* Option 3: Standard Single Item (if variants disabled) */}
+              {!hasVariants && (
+                <div className="flex items-center justify-between pb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Standard Edition
                       </span>
-                    </label>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {availableColors.map((col) => (
-                      <span
-                        key={col}
-                        className="px-3 py-1.5 rounded-xl bg-orange-50/70 text-slate-800 text-xs font-bold border border-orange-200/60"
-                      >
-                        {col}
+                      <span className="text-[11px] text-slate-400">
+                        Single item purchase • Direct Dispatch
                       </span>
-                    ))}
+                    </div>
                   </div>
+                  <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200/70 px-2.5 py-1 rounded-xl">
+                    In Stock
+                  </span>
                 </div>
               )}
 
@@ -1040,41 +1167,41 @@ export function ProductView({ product }: ProductViewProps) {
                       <td className="p-2 sm:p-2.5 font-bold border border-slate-200 text-slate-900">
                         S (36)
                       </td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">36"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">32"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">46"</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">36 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">32 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">46 in</td>
                     </tr>
                     <tr>
                       <td className="p-2 sm:p-2.5 font-bold border border-slate-200 text-slate-900">
                         M (38)
                       </td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">38"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">34"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">47"</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">38 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">34 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">47 in</td>
                     </tr>
                     <tr>
                       <td className="p-2 sm:p-2.5 font-bold border border-slate-200 text-slate-900">
                         L (40)
                       </td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">40"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">36"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">48"</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">40 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">36 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">48 in</td>
                     </tr>
                     <tr>
                       <td className="p-2 sm:p-2.5 font-bold border border-slate-200 text-slate-900">
                         XL (42)
                       </td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">42"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">38"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">48"</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">42 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">38 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">48 in</td>
                     </tr>
                     <tr>
                       <td className="p-2 sm:p-2.5 font-bold border border-slate-200 text-slate-900">
                         XXL (44)
                       </td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">44"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">40"</td>
-                      <td className="p-2 sm:p-2.5 border border-slate-200">49"</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">44 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">40 in</td>
+                      <td className="p-2 sm:p-2.5 border border-slate-200">49 in</td>
                     </tr>
                   </tbody>
                 </table>

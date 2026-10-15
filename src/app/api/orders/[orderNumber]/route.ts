@@ -46,6 +46,9 @@ export async function GET(
       shipping_charge: order.shipping_charge,
       total_amount: order.total_amount,
       payment_status: order.payment_status,
+      payment_method:
+        order.payment_method ||
+        (order.payment?.razorpay_order_id?.startsWith("COD-") ? "cod" : "online"),
       fulfillment_status: order.fulfillment_status,
       created_at: order.created_at,
       items: order.items,

@@ -10,8 +10,8 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [email, setEmail] = useState("admin@meeshoapp.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -99,12 +99,12 @@ export default function AdminLoginPage() {
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 text-[11px] text-slate-400">
+          {/* <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 text-[11px] text-slate-400">
             <strong>Default Demo Credentials:</strong>
             <div className="mt-1 font-mono text-orange-400">
               admin@meeshoapp.com / admin123
             </div>
-          </div>
+          </div> */}
 
           <Button
             type="submit"

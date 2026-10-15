@@ -54,7 +54,12 @@ export function OrderConfirmationView({
       if (data.success && data.order) {
         setOrder(data.order);
         // Trigger celebratory confetti on initial load
-        if (data.order.payment_status === "paid") {
+        if (
+          data.order.payment_status === "paid" ||
+          data.order.payment_method === "cod" ||
+          data.order.payment?.razorpay_order_id?.startsWith("COD-") ||
+          data.order.fulfillment_status === "awaiting_purchase"
+        ) {
           confetti({
             particleCount: 80,
             spread: 70,
@@ -169,43 +174,12 @@ export function OrderConfirmationView({
     );
   }
 
-  // Get current milestone step
-  const statusSteps = [
-    {
-      id: "paid",
-      title: "Order Placed & Paid",
-      description: "Payment confirmed via Razorpay",
-      isDone: true,
-      current: order.fulfillment_status === "awaiting_purchase",
-    },
-    {
-      id: "purchased_from_meesho",
-      title: "Processed with Supplier",
-      description: "Packaged & prepared for courier dispatch",
-      isDone: [
-        "purchased_from_meesho",
-        "shipped",
-        "delivered",
-      ].includes(order.fulfillment_status),
-      current: order.fulfillment_status === "purchased_from_meesho",
-    },
-    {
-      id: "shipped",
-      title: "Shipped & In Transit",
-      description: order.tracking?.courier_name
-        ? `Via ${order.tracking.courier_name}`
-        : "On the way to your city",
-      isDone: ["shipped", "delivered"].includes(order.fulfillment_status),
-      current: order.fulfillment_status === "shipped",
-    },
-    {
-      id: "delivered",
-      title: "Delivered",
-      description: "Delivered to your doorstep",
-      isDone: order.fulfillment_status === "delivered",
-      current: order.fulfillment_status === "delivered",
-    },
-  ];
+  const isCod =
+    order.payment_method === "cod" ||
+    order.payment?.payment_method === "cod" ||
+    order.payment?.razorpay_order_id?.startsWith("COD-") ||
+    (order.payment_status === "pending" && order.fulfillment_status === "awaiting_purchase");
+
 
   return (
     <div className="min-h-screen bg-[#FFFDFB] text-[#1E222B] pb-16 antialiased selection:bg-[#FF7A00] selection:text-white">
@@ -213,7 +187,7 @@ export function OrderConfirmationView({
       <header className="bg-white/95 backdrop-blur-md border-b border-orange-100/60 px-4 py-3 shadow-xs">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center">
+            <Link href="" className="flex items-center">
               <img
                 src="/logo.png"
                 alt="Shoplume"
@@ -245,13 +219,15 @@ export function OrderConfirmationView({
           </div>
           <div className="flex-1 relative z-10">
             <span className="text-xs uppercase tracking-widest font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF7A00] to-[#FF2D55]">
-              Payment Confirmed • Verified Order
+              {isCod ? "Cash on Delivery • Order Confirmed" : "Payment Confirmed • Verified Order"}
             </span>
             <h1 className="text-2xl sm:text-3xl font-black mt-0.5 tracking-tight text-white">
               Thank You for Your Order!
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl leading-relaxed">
-              We have received your payment via Razorpay. Your order has been placed into our direct supplier dispatch queue.
+              {isCod
+                ? `Your Cash on Delivery order is placed and being prepared for dispatch. Please keep ${formatINR(order.total_amount)} ready in cash or UPI app when your courier arrives.`
+                : "We have received your payment via Razorpay. Your order has been placed into our direct supplier dispatch queue."}
             </p>
 
             <div className="mt-4 flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs">
@@ -266,80 +242,36 @@ export function OrderConfirmationView({
                 </button>
               </span>
               <span className="bg-white/10 border border-white/10 px-3 py-1.5 rounded-xl font-semibold text-orange-200">
-                Amount Paid: {formatINR(order.total_amount)}
+                {isCod ? "Pay on Delivery: " : "Amount Paid: "}{formatINR(order.total_amount)}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Live Delivery Status Stepper */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h2 className="font-bold text-[#1E222B] text-sm sm:text-base mb-6 flex items-center gap-2">
-            <Truck className="w-4 h-4 text-[#FF7A00]" />
-            <span>Live Delivery Timeline</span>
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
-            {statusSteps.map((step, idx) => (
-              <div
-                key={step.id}
-                className={`relative flex md:flex-col items-start gap-3 p-3 rounded-xl transition-all ${
-                  step.current
-                    ? "bg-orange-50/80 border border-orange-200 shadow-xs"
-                    : "bg-slate-50/50"
-                }`}
-              >
-                <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                    step.isDone
-                      ? "bg-gradient-to-r from-orange-500 to-rose-500 text-white shadow-xs"
-                      : "bg-slate-200 text-slate-500"
-                  }`}
-                >
-                  {step.isDone ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
-                </div>
-
-                <div className="flex-1">
-                  <h3
-                    className={`text-xs font-bold ${
-                      step.current ? "text-orange-950 font-black" : "text-slate-800"
-                    }`}
-                  >
-                    {step.title}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
-                    {step.description}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Courier Tracking Info if Shipped */}
-          {order.tracking?.tracking_number && (
-            <div className="mt-5 p-4 rounded-xl bg-orange-50/40 border border-orange-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-              <div>
-                <span className="font-semibold text-slate-500 block">
-                  Courier Partner: {order.tracking.courier_name || "Express Courier"}
-                </span>
-                <span className="font-bold text-[#1E222B] text-sm font-mono">
-                  AWB Tracking No: {order.tracking.tracking_number}
-                </span>
-              </div>
-              {order.tracking.tracking_url && (
-                <a
-                  href={order.tracking.tracking_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-orange-500 via-rose-500 to-rose-600 text-white font-bold hover:brightness-105 transition-colors shadow-xs"
-                >
-                  <span>Track Live on Courier Site</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              )}
+        {/* Courier Tracking Info if Shipped */}
+        {order.tracking?.tracking_number && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div>
+              <span className="font-semibold text-slate-500 block">
+                Courier Partner: {order.tracking.courier_name || "Express Courier"}
+              </span>
+              <span className="font-bold text-[#1E222B] text-sm font-mono">
+                AWB Tracking No: {order.tracking.tracking_number}
+              </span>
             </div>
-          )}
-        </div>
+            {order.tracking.tracking_url && (
+              <a
+                href={order.tracking.tracking_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-orange-500 via-rose-500 to-rose-600 text-white font-bold hover:brightness-105 transition-colors shadow-xs"
+              >
+                <span>Track Courier</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Order Details & Address Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -382,7 +314,7 @@ export function OrderConfirmationView({
               </div>
             ))}
 
-            <div className="pt-3 border-t border-slate-100 space-y-1.5 text-xs text-slate-600">
+            <div className="pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
               <div className="flex justify-between">
                 <span>Subtotal</span>
                 <span>{formatINR(order.subtotal)}</span>
@@ -391,8 +323,17 @@ export function OrderConfirmationView({
                 <span>Delivery</span>
                 <span className="text-emerald-600 font-bold">FREE</span>
               </div>
+              <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                <span>Payment Method</span>
+                <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${isCod
+                    ? "bg-orange-500/10 text-[#FF5520] border border-orange-500/20"
+                    : "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                  }`}>
+                  {isCod ? "Cash on Delivery (COD)" : "Online (Razorpay Verified)"}
+                </span>
+              </div>
               <div className="flex justify-between font-extrabold text-[#1E222B] text-sm pt-2 border-t border-slate-100">
-                <span>Total Amount Paid</span>
+                <span>{isCod ? "Total Due on Delivery" : "Total Amount Paid"}</span>
                 <span>{formatINR(order.total_amount)}</span>
               </div>
             </div>
